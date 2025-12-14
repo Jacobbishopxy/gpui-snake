@@ -307,19 +307,42 @@ impl SnakeGame {
             self.direction = self.next_direction;
             let next = head.offset(self.direction);
 
-            if !self.board_contains(&next) || self.snake.contains(&next) {
+            if !self.board_contains(&next) {
+                eprintln!(
+                    "Game over (wall): head=({}, {}), next=({}, {}), board=({}, {})",
+                    head.x, head.y, next.x, next.y, self.board_width, self.board_height
+                );
+                self.state = GameStatus::GameOver;
+                cx.notify();
+                return;
+            }
+
+            let ate_food = next == self.food;
+            if !ate_food {
+                self.snake.pop_back();
+            }
+
+            if self.snake.contains(&next) {
+                eprintln!(
+                    "Game over (self): head=({}, {}), next=({}, {}), len={}, board=({}, {})",
+                    head.x,
+                    head.y,
+                    next.x,
+                    next.y,
+                    self.snake.len(),
+                    self.board_width,
+                    self.board_height
+                );
                 self.state = GameStatus::GameOver;
                 cx.notify();
                 return;
             }
 
             self.snake.push_front(next);
-            if next == self.food {
+            if ate_food {
                 self.score += 1;
                 self.high_score = self.high_score.max(self.score);
                 self.food = self.random_empty_cell();
-            } else {
-                self.snake.pop_back();
             }
             cx.notify();
         }
@@ -436,7 +459,13 @@ impl Render for SnakeGame {
                     .bg(rgb(0x111827))
                     .shadow_lg()
                     .relative()
-                    .child(grid)
+                    .child(
+                        div()
+                            .p_2()
+                            .rounded_lg()
+                            .bg(rgb(0x1f2937))
+                            .child(grid),
+                    )
                     .when_some(overlay_text, |this, message| {
                         this.child(
                             div()
@@ -471,6 +500,36 @@ impl Render for SnakeGame {
                             .child(text)
                     })),
             )
+            .child({
+                let head = self.snake.front().copied();
+                let head_str = head
+                    .map(|c| format!("({}, {})", c.x, c.y))
+                    .unwrap_or_else(|| "-".into());
+                let left_space = head.map(|c| c.x).unwrap_or_default();
+                let right_space = head
+                    .map(|c| self.board_width - c.x - 1)
+                    .unwrap_or_default();
+                let top_space = head.map(|c| c.y).unwrap_or_default();
+                let bottom_space = head
+                    .map(|c| self.board_height - c.y - 1)
+                    .unwrap_or_default();
+
+                div()
+                    .mt_2()
+                    .text_sm()
+                    .text_color(rgb(0x93c5fd))
+                    .child(format!(
+                        "Board: {}x{}, Head: {}, Len: {}, Left: {}, Right: {}, Top: {}, Bottom: {}",
+                        self.board_width,
+                        self.board_height,
+                        head_str,
+                        self.snake.len(),
+                        left_space,
+                        right_space,
+                        top_space,
+                        bottom_space
+                    ))
+            })
     }
 }
 
